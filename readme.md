@@ -236,7 +236,8 @@ my_unsigned_div my_unsigned_div1(
 assign es_ready_go    = ((inst_div || inst_divu) && div_ok ) ||
                         ~(inst_div || inst_divu);
 ```
-最后这里握手的波形是这样的：
+最后这里握手的波形是这样的：         
 ![](https://i.loli.net/2021/07/06/EosFrAwbt9Ni1eZ.png)
-此处握手时间很长，后面看了一下跟踪的实现，时间也挺长，但是要稍微快30%.  
+
+此处握手时间很长，后面看了一下跟踪的实现，时间也挺长，但是要稍微快30%.            
 ![](https://i.loli.net/2021/07/06/L5ZR1XGAlMN2nC7.png)
