@@ -1,40 +1,242 @@
-# lab5
-第四章实践任务三  
-参考了https://blog.csdn.net/jojo_it_journey/article/details/117431349 的博客
+# lab6
+这个lab的任务是拓展非跳转和非读取指令。  
+算术和逻辑运算指令因为不需要考虑例外，只需要加上译码就行了。需要注意的一个是`ANDI`,`ORI`,`XORI`这几个指令和其他不一样，是采用零拓展的，因此需要特别处理一下
+```verilog
+wire [15:0] alu_op;
+wire src2_is_unsigned_imm;
+wire  [3:0] hilo;
 
-这个lab其实比较简单，但是当时由于没仔细看书，而且刚刚入门，犯了一堆很蠢的错误。
+assign ds_to_es_bus = {hilo        ,  //144:141
+                       alu_op      ,  //140:125 添加乘除2bit
+                       load_op     ,  //124:124 
+                       src1_is_sa  ,  //123:123
+                       src1_is_pc  ,  //122:122
+                       src2_is_unsigned_imm,//121:121
+                       src2_is_imm ,  //120:120
+                       src2_is_8   ,  //119:119
+                       gr_we       ,  //118:118
+                       mem_we      ,  //117:117 数据ram写使能
+                       dest        ,  //116:112
+                       imm         ,  //111:96
+                       rs_value    ,  //95 :64
+                       rt_value    ,  //63 :32
+                       ds_pc          //31 :0
+                      };
+assign inst_add    = op_d[6'h00] & func_d[6'h20] & sa_d[5'h00];
+assign inst_addi   = op_d[6'h08];
+assign inst_sub    = op_d[6'h00] & func_d[6'h22] & sa_d[5'h00];
+assign inst_slti   = op_d[6'h0a];
+assign inst_sltiu  = op_d[6'h0b];
+assign inst_andi   = op_d[6'h0c];
+assign inst_ori    = op_d[6'h0d];
+assign inst_xori   = op_d[6'h0e];
+assign inst_sllv   = op_d[6'h00] & func_d[6'h04] & sa_d[5'h00];
+assign inst_srav   = op_d[6'h00] & func_d[6'h07] & sa_d[5'h00];
+assign inst_srlv   = op_d[6'h00] & func_d[6'h06] & sa_d[5'h00];
+assign inst_mult   = op_d[6'h00] & func_d[6'h18] & sa_d[5'h00];
+assign inst_multu  = op_d[6'h00] & func_d[6'h19] & sa_d[5'h00];
+assign inst_div    = op_d[6'h00] & func_d[6'h1a] & sa_d[5'h00];
+assign inst_divu   = op_d[6'h00] & func_d[6'h1b] & sa_d[5'h00];
+assign inst_mfhi   = op_d[6'h00] & func_d[6'h10] & sa_d[5'h00];
+assign inst_mflo   = op_d[6'h00] & func_d[6'h12] & sa_d[5'h00];
+assign inst_mthi   = op_d[6'h00] & func_d[6'h11];
+assign inst_mtlo   = op_d[6'h00] & func_d[6'h13];		
+assign alu_op[ 0] = inst_addu | inst_addiu | inst_lw | inst_sw | inst_jal | inst_add | inst_addi;
+assign alu_op[ 1] = inst_subu| inst_sub;
+assign alu_op[ 2] = inst_slt| inst_slti;
+assign alu_op[ 3] = inst_sltu| inst_sltiu;
+assign alu_op[ 4] = inst_and| inst_andi;
+assign alu_op[ 5] = inst_nor;
+assign alu_op[ 6] = inst_or| inst_ori;
+assign alu_op[ 7] = inst_xor| inst_xori;
+assign alu_op[ 8] = inst_sll| inst_sllv;
+assign alu_op[ 9] = inst_srl| inst_srlv;
+assign alu_op[10] = inst_sra | inst_srav;
+assign alu_op[11] = inst_lui;
+assign alu_op[12] = inst_mult;
+assign alu_op[13] = inst_multu;
+assign alu_op[14] = inst_div;
+assign alu_op[15] = inst_divu;			
+assign src2_is_imm  = inst_addiu |inst_lui | inst_lw | inst_sw | inst_addi  |inst_slti | inst_sltiu;
+assign src2_is_unsigned_imm =  inst_andi | inst_ori | inst_xori;
+assign hilo   = {inst_mfhi,inst_mflo,inst_mthi,inst_mtlo};
 
-## 准备工作
-首先需要完成lab3调试，如果调不出来可以参考https://blog.csdn.net/jojo_it_journey/article/details/117377366 的博客
+```
 
-建议把代码好好读一读，搞懂每个变量的作用和CPU到底怎么运行再往下。
+`EXE`部分也是类似：
+```verilog
+assign {inst_mfhi,inst_mflo,inst_mthi,inst_mtlo} = es_hilo;
+assign {es_hilo        ,  //144:141
+        es_alu_op      ,  //140:125
+        es_load_op     ,  //124:124
+        es_src1_is_sa  ,  //123:123
+        es_src1_is_pc  ,  //122:122
+        es_src2_is_unsigned_imm,//121:121
+        es_src2_is_imm ,  //120:120
+        es_src2_is_8   ,  //119:119
+        es_gr_we       ,  //118:118
+        es_mem_we      ,  //117:117
+        es_dest        ,  //116:112
+        es_imm         ,  //111:96
+        es_rs_value    ,  //95 :64
+        es_rt_value    ,  //63 :32
+        es_pc             //31 :0
+       } = ds_to_es_bus_r;
+assign es_alu_src2 = es_src2_is_unsigned_imm?{{16{1'b0}}, es_imm[15:0]}: // 如果是and or xor 做0拓展
+                     es_src2_is_imm ? {{16{es_imm[15]}}, es_imm[15:0]} : // 立即数做符号拓展
+                     es_src2_is_8   ? 32'd8 : //特殊数字
+                                      es_rt_value;
 
-lab4和lab5需要替换func_lab。具体的流程参考书上4.3.3 2重新定制inst_ram部分。
-## 大致的思路
-这个lab要求用前递解决流水线冲突问题。也就是说，把`EXE`,`MEM`,`WB`将要传给下一层的结果直接传给`ID`即可。传到`ID`后，`ID`比较一下寄存器，看是否与源寄存器相同，并且寄存器标号不为0，最后通过一个优先级的4-1选择器选择信号。
+```
+比较麻烦的是添加乘法和除法。这边我直接采用了调用IP的方式。
 
-怎么传呢？需要理解的是，mycpu五个调用的阶段是同时在运行的，并且因为是流水线，它们是分别属于不同的指令的。因此只需要给`ID`加三个输入，给`EXE`,`MEM`,`WB`加三个输出，把它们连起来即可。
+对于乘法，直接乘起来就可以。并且这个乘法只需要消耗单周期延迟，因此直接在alu里面写上乘法就行了。
 
-要传的数据是什么呢？首先需要有各阶段计算出的数据和寄存器的标号，例如`ms_dest,ms_final_result`、`es_dest,es_load_op,es_alu_result`，`ws_dest,ws_final_result`.其次还需要有valid信号，如果没有valid信号，直接对寄存器进行判断，这时候如果该阶段没有目的寄存器（值为`XXXX`），那么做逻辑判断似乎会恒为真。此外，还需要考虑寄存器编号是否为0或者寄存器是读寄存器还是写寄存器。
+对于除法，书上指出直接用运算符推导的部件时序会比较差，因此要手动添加。这里生成的IP核是用AXI接口进行使用的，因此`EXE`阶段调用时要进行握手。
 
-如果做了lab4再做lab5，以上的操作就足够了。但是如果直接跳过lab4，还需要考虑`Load-to-Branch`的问题，否则执行到一半就会报错。这一点在4.6.2有提到，但是作者是在**完成阻塞操作后**说的，当时我看的时候没注意，以为可以暂时先忽略。`Load-to-Branch`的主要原因是仿存的数据要到MEM阶段才有，而后续的ADD不能在`ID`阶段就取得相应寄存器的值，因此要停一拍。具体到实现上，可以在`EXE`阶段从旁路中传回是否是`load`指令，然后由`ID`在`ready_go`中决定是否要暂停流水线。
+一开始我在ALU里添加除法，因为要握手，就要给ALU添加时序；并且，由于外面要进行阻塞，外面就需要获取ALU的状况，在完成时，ALU要通知`EXE`，而`EXE`也要让`ALU`停下来，这样相当于又要做一次握手；于是我就把除法器从ALU中移出来了
 
-## 遇到的问题
-由于刚上手HDL，我遇到了不少问题。
+关于握手，我是这样操作的：检测到除法操作时，阻塞`EXE`，同时状态机进入握手状态；尝试和被除数有效和除数有效握手，注意这里被除数(`dividend`)和(`divisor`)的顺序。rs是`dividend`，而rt是`divisor`。握手我用组合逻辑检测，一旦两边都握手成功，就撤下`valid`信号，同时状态机进入等待状态，直到`m_axis_dout_tvalid`返回有效位置。这时读取结果，状态机进入初始阶段，下一拍后，继续执行流水线。取到结果后，把`hi`和`lo`保存到相应的寄存器中。因为这里除法是和alu分离的，要记得用选择器选择最后的结果。
+```verilog
+// div result
+assign inst_div   = es_alu_op[14];
+assign inst_divu  = es_alu_op[15];
 
-* 偏移量计算错误  
-	```verilog
-	assign es_to_id_bypass_reg = es_to_id_bypass[37:33];//寄存器是5位
-	```
-* 变量名打错  
-	```verilog
-	assign es_to_id_bypass_data = es_to_id_bypass[31:0];
-	assign ms_to_id_bypass_data = es_to_id_bypass[31:0];//打错
-	assign ws_to_id_bypass_data = es_to_id_bypass[31:0];//打错
-	```
-	这个其实很明显，但是我一直在用波形去查错，而不是直接看代码，所以调了一个小时没发现这个问题。最后我还是用波形找到的这个错误，因为我发现`es_to_id_bypass_data`、`ms_to_id_bypass_data`，`ws_to_id_bypass_data`不是对应的（正常来说，`ms_to_id_bypass_data`的下一拍就是现在的`es_to_id_bypass_data`）
+wire [63:0] signed_div_result;
+wire [63:0] unsigned_div_result;
+reg div_s_axis_divisor_tvalid;
+reg div_s_axis_dividend_tvalid;
+wire div_m_axis_dout_tvalid;
+wire div_s_axis_divisor_tready;//divisor握手成功
+wire div_s_axis_dividend_tready;//dividend握手成功
 
-* `Load-to-Branch`没有处理  
-  上面说过了
+reg udiv_s_axis_divisor_tvalid;
+reg udiv_s_axis_dividend_tvalid;
+wire udiv_s_axis_divisor_tready;//握手成功
+wire udiv_s_axis_dividend_tready;//dividend握手成功
+wire udiv_m_axis_dout_tvalid;
+
+reg[2:0] div_ps; // 0-正常 1-除法握手阶段 2-无符号除法握手阶段 3-除法等待结果阶段 4-无符号除法等待结果阶段
+reg[2:0] div_ns;
+wire[1:0] handshake;
+parameter DIV_IDLE = 0;
+parameter DIV_SIGNED_HANDSHAKE = 1;
+parameter DIV_UNSIGNED_HANDSHAKE = 2;
+parameter DIV_SIGNED_WAITING = 3;
+parameter DIV_UNSIGNED_WAITING = 4;
+reg div_ok;
+assign handshake[0] = (inst_div)? (div_s_axis_divisor_tready == div_s_axis_divisor_tvalid && div_s_axis_divisor_tvalid==1):
+                      (inst_divu)? (udiv_s_axis_divisor_tready == udiv_s_axis_divisor_tvalid && udiv_s_axis_divisor_tvalid==1):
+                      1'b0;
+assign handshake[1] = (inst_div)? (div_s_axis_dividend_tready == div_s_axis_dividend_tvalid && div_s_axis_dividend_tvalid==1):
+                      (inst_divu)? (udiv_s_axis_dividend_tready == udiv_s_axis_dividend_tvalid && udiv_s_axis_dividend_tvalid==1):
+                      1'b0;                      
 
 
+// 组合逻辑，确认下一状态
+always @(*) begin
+  if(div_ps==DIV_IDLE)begin
+    div_ok = 1'b0;
+    if(inst_div)div_ns<=DIV_SIGNED_HANDSHAKE;
+    else if(inst_divu)div_ns<=DIV_UNSIGNED_HANDSHAKE;
+    else div_ns<=DIV_IDLE;
+  end
+
+  else if(div_ps==DIV_SIGNED_HANDSHAKE)begin
+    if(handshake==2'b11)div_ns <= DIV_SIGNED_WAITING;
+    else div_ns<=DIV_SIGNED_HANDSHAKE;
+  end
+  else if(div_ps==DIV_UNSIGNED_HANDSHAKE)begin
+    if(handshake==2'b11)div_ns<=DIV_UNSIGNED_WAITING;
+    else div_ns<=DIV_UNSIGNED_HANDSHAKE;
+  end
+  else if(div_ps == DIV_SIGNED_WAITING)
+    if(div_m_axis_dout_tvalid)begin
+      div_ns <= DIV_IDLE;
+      div_ok<= 1'b1;
+    end
+    else div_ns <= DIV_SIGNED_WAITING;
+  else if(div_ps == DIV_UNSIGNED_WAITING)begin
+    if(udiv_m_axis_dout_tvalid)begin
+      div_ns <= DIV_IDLE;
+      div_ok <= 1'b1;
+    end
+    else div_ns <= DIV_UNSIGNED_WAITING;
+  end
+  else 
+    div_ns <= DIV_IDLE;
+end
+always @(posedge clk) begin
+    div_ps <= div_ns;
+end
+
+always @(posedge clk) begin
+    if(div_ps == DIV_SIGNED_HANDSHAKE)begin
+      if(!div_s_axis_divisor_tready)begin
+        div_s_axis_divisor_tvalid  <= 1'b1;
+      end
+      else begin
+        div_s_axis_divisor_tvalid  <= 1'b0;
+      end
+
+      if(!div_s_axis_dividend_tready)begin
+        div_s_axis_dividend_tvalid  <= 1'b1;
+      end
+      else begin
+        div_s_axis_dividend_tvalid  <= 1'b0;
+
+      end   
+    end
+    else if(div_ps == DIV_UNSIGNED_HANDSHAKE) begin
+      if(!udiv_s_axis_divisor_tready)begin
+        udiv_s_axis_divisor_tvalid  <= 1'b1;
+      end
+      else begin
+        udiv_s_axis_divisor_tvalid  <= 1'b0;
+      end
+      if(!udiv_s_axis_dividend_tready)begin
+        udiv_s_axis_dividend_tvalid  <= 1'b1;
+      end
+      else begin
+        udiv_s_axis_dividend_tvalid  <= 1'b0;
+      end     
+    end
+    else begin
+      div_s_axis_divisor_tvalid  <= 1'b0;
+      div_s_axis_dividend_tvalid <= 1'b0;
+      udiv_s_axis_divisor_tvalid  <= 1'b0;
+      udiv_s_axis_dividend_tvalid  <= 1'b0;
+    end
+end
+
+my_signed_div my_signed_div1(
+ .aclk                    (clk),
+ .s_axis_divisor_tvalid   (div_s_axis_divisor_tvalid),
+ .s_axis_divisor_tready   (div_s_axis_divisor_tready),
+ .s_axis_divisor_tdata    (es_alu_src2),
+ .s_axis_dividend_tvalid  (div_s_axis_dividend_tvalid),
+ .s_axis_dividend_tready  (div_s_axis_dividend_tready),
+ .s_axis_dividend_tdata   (es_alu_src1),
+ .m_axis_dout_tvalid      (div_m_axis_dout_tvalid),
+ .m_axis_dout_tdata       (signed_div_result)
+);   
+
+my_unsigned_div my_unsigned_div1(
+ .aclk                    (clk),
+ .s_axis_divisor_tvalid   (udiv_s_axis_divisor_tvalid),
+ .s_axis_divisor_tready   (udiv_s_axis_divisor_tready),
+ .s_axis_divisor_tdata    (es_alu_src2),
+ .s_axis_dividend_tvalid  (udiv_s_axis_dividend_tvalid),
+ .s_axis_dividend_tready  (udiv_s_axis_dividend_tready),
+ .s_axis_dividend_tdata   (es_alu_src1),
+ .m_axis_dout_tvalid      (udiv_m_axis_dout_tvalid),
+ .m_axis_dout_tdata       (unsigned_div_result)
+);   
+
+assign es_ready_go    = ((inst_div || inst_divu) && div_ok ) ||
+                        ~(inst_div || inst_divu);
+```
+最后这里握手的波形是这样的：
+![](https://i.loli.net/2021/07/06/EosFrAwbt9Ni1eZ.png)
+此处握手时间很长，后面看了一下跟踪的实现，时间也挺长，但是要稍微快30%.  
+![](https://i.loli.net/2021/07/06/L5ZR1XGAlMN2nC7.png)

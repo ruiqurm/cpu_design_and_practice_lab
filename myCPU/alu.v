@@ -1,7 +1,11 @@
+
 module alu(
-  input  [11:0] alu_op,
+  // input         clk,
+  input  [15:0] alu_op,
   input  [31:0] alu_src1,
   input  [31:0] alu_src2,
+  // output        ok,
+  output [31:0] hi,
   output [31:0] alu_result
 );
 
@@ -18,6 +22,11 @@ wire op_srl;   //逻辑右移
 wire op_sra;   //算术右移
 wire op_lui;   //立即数置于高半部分
 
+wire op_mult; //乘法
+wire op_multu; //乘法
+// wire op_div;  //除法
+// wire op_divu;  //除法
+
 // control code decomposition
 assign op_add  = alu_op[ 0];
 assign op_sub  = alu_op[ 1];
@@ -31,6 +40,14 @@ assign op_sll  = alu_op[ 8];
 assign op_srl  = alu_op[ 9];
 assign op_sra  = alu_op[10];
 assign op_lui  = alu_op[11];
+
+assign op_mult = alu_op[12];
+assign op_multu= alu_op[13];
+// assign op_div  = alu_op[14];
+// assign op_divu = alu_op[15];
+// always @(clk)begin
+//   op_div <= alu_op[14];
+// end
 
 wire [31:0] add_sub_result; 
 wire [31:0] slt_result; 
@@ -84,6 +101,24 @@ assign sr64_result = {{32{op_sra & alu_src2[31]}}, alu_src2[31:0]} >> alu_src1[4
 
 assign sr_result   = sr64_result[31:0];
 
+// MULT,MULTU result
+wire [32:0] mult_src1;//多1位
+wire [32:0] mult_src2;
+wire [32:0] multu_src1;//多1位
+wire [32:0] multu_src2;
+
+wire [63:0] unsigned_prod;
+wire [63:0] signed_prod;
+
+wire [1:0]no_use;
+assign mult_src1 = {alu_src1[31],alu_src1};
+assign mult_src2 = {alu_src2[31],alu_src2};
+assign multu_src1 = {1'b0,alu_src1};
+assign multu_src2 = {1'b0,alu_src2};
+
+assign {no_use,signed_prod} = $signed(mult_src1) * $signed(mult_src2);
+assign {no_use,unsigned_prod} = $signed(multu_src1) * $signed(multu_src2);
+
 // final result mux
 assign alu_result = ({32{op_add|op_sub}} & add_sub_result)
                   | ({32{op_slt       }} & slt_result)
@@ -94,6 +129,10 @@ assign alu_result = ({32{op_add|op_sub}} & add_sub_result)
                   | ({32{op_xor       }} & xor_result)
                   | ({32{op_lui       }} & lui_result)
                   | ({32{op_sll       }} & sll_result)
-                  | ({32{op_srl|op_sra}} & sr_result);
-
+                  | ({32{op_srl|op_sra}} & sr_result)
+                  | ({32{op_multu}} & unsigned_prod[31:0])
+                  | ({32{op_mult}} & signed_prod[31:0]);
+assign hi        =  ({32{op_multu}} & unsigned_prod[63:32])
+                 | ({32{op_mult}}  & signed_prod[63:32]) ;
+// assign ok   = (op_div || op_divu) ? div_ok: 1'b1;                
 endmodule

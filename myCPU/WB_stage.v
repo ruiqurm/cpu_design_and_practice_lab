@@ -15,7 +15,7 @@ module wb_stage(
     output [ 3:0] debug_wb_rf_wen ,
     output [ 4:0] debug_wb_rf_wnum,
     output [31:0] debug_wb_rf_wdata,
-    output [`WS_TO_ID_BYPASS-1:0] ws_to_id_bypass
+    output [`WS_TO_DS_BYPASS-1:0] ws_to_ds_bypass
 );
 
 reg         ws_valid;
@@ -65,6 +65,6 @@ assign debug_wb_rf_wen   = {4{rf_we}};
 assign debug_wb_rf_wnum  = ws_dest;
 assign debug_wb_rf_wdata = ws_final_result;
 
-assign ws_to_id_bypass = {ws_valid & ws_gr_we,ws_dest,ws_final_result};
+assign ws_to_ds_bypass = {ws_valid & ws_gr_we,ws_dest,ws_final_result};
 
 endmodule

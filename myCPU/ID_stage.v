@@ -18,9 +18,9 @@ module id_stage(
     input  [`WS_TO_RF_BUS_WD -1:0] ws_to_rf_bus,
     
     //旁路
-    input [`ES_TO_ID_BYPASS-1:0] es_to_id_bypass,
-    input [`MS_TO_ID_BYPASS-1:0] ms_to_id_bypass,
-    input [`WS_TO_ID_BYPASS-1:0] ws_to_id_bypass
+    input [`ES_TO_DS_BYPASS-1:0] es_to_ds_bypass,
+    input [`MS_TO_DS_BYPASS-1:0] ms_to_ds_bypass,
+    input [`WS_TO_DS_BYPASS-1:0] ws_to_ds_bypass
 );
 
 reg         ds_valid   ;
@@ -46,11 +46,12 @@ assign {rf_we   ,  //37:37
 wire        br_taken;
 wire [31:0] br_target;
 
-wire [11:0] alu_op;
+wire [15:0] alu_op;
 wire        load_op;
 wire        src1_is_sa;
 wire        src1_is_pc;
 wire        src2_is_imm;
+wire        src2_is_unsigned_imm;
 wire        src2_is_8;
 wire        res_from_mem;
 wire        gr_we;
@@ -74,6 +75,26 @@ wire [31:0] rd_d;
 wire [31:0] sa_d;
 wire [63:0] func_d;
 
+wire        inst_add; 
+wire        inst_addi;
+wire        inst_sub;
+wire        inst_slti;
+wire        inst_sltiu;
+wire        inst_andi;
+wire        inst_ori;
+wire        inst_xori;
+wire        inst_sllv;
+wire        inst_srav;
+wire        inst_srlv;
+
+wire        inst_mult;
+wire        inst_multu;
+wire        inst_div;
+wire        inst_divu;
+wire        inst_mfhi;
+wire        inst_mflo;
+wire        inst_mthi;
+wire        inst_mtlo;
 
 wire        inst_addu;
 wire        inst_addiu;
@@ -105,17 +126,22 @@ wire [ 4:0] rf_raddr2;
 wire [31:0] rf_rdata2;
 
 wire        rs_eq_rt;
+wire  [3:0] hilo;
 
+// wire br_stall;
+// assign br_stall 
 assign br_bus       = {br_taken,br_target};
 
-assign ds_to_es_bus = {alu_op      ,  //135:124
-                       load_op     ,  //123:123 数据ram读使能
-                       src1_is_sa  ,  //122:122
-                       src1_is_pc  ,  //121:121
+assign ds_to_es_bus = {hilo        ,  //144:141
+                       alu_op      ,  //140:125 添加乘除2bit
+                       load_op     ,  //124:124 
+                       src1_is_sa  ,  //123:123
+                       src1_is_pc  ,  //122:122
+                       src2_is_unsigned_imm,//121:121
                        src2_is_imm ,  //120:120
                        src2_is_8   ,  //119:119
                        gr_we       ,  //118:118
-                       mem_we      ,  //117:117 数据ram写使能
+                       mem_we      ,  //117:117 
                        dest        ,  //116:112
                        imm         ,  //111:96
                        rs_value    ,  //95 :64
@@ -142,8 +168,8 @@ assign op   = ds_inst[31:26];// opcode
 assign rs   = ds_inst[25:21];
 assign rt   = ds_inst[20:16];
 assign rd   = ds_inst[15:11];
-assign sa   = ds_inst[10: 6];
-assign func = ds_inst[ 5: 0];
+assign sa   = ds_inst[10: 6]; // shift amount
+assign func = ds_inst[ 5: 0]; // function
 assign imm  = ds_inst[15: 0];// 立即数
 assign jidx = ds_inst[25: 0];// instruction index
 
@@ -154,7 +180,28 @@ decoder_5_32 u_dec3(.in(rt  ), .out(rt_d  ));
 decoder_5_32 u_dec4(.in(rd  ), .out(rd_d  ));
 decoder_5_32 u_dec5(.in(sa  ), .out(sa_d  ));
 
-// 判断
+
+assign inst_add    = op_d[6'h00] & func_d[6'h20] & sa_d[5'h00];
+assign inst_addi   = op_d[6'h08];
+assign inst_sub    = op_d[6'h00] & func_d[6'h22] & sa_d[5'h00];
+assign inst_slti   = op_d[6'h0a];
+assign inst_sltiu  = op_d[6'h0b];
+assign inst_andi   = op_d[6'h0c];
+assign inst_ori    = op_d[6'h0d];
+assign inst_xori   = op_d[6'h0e];
+assign inst_sllv   = op_d[6'h00] & func_d[6'h04] & sa_d[5'h00];
+assign inst_srav   = op_d[6'h00] & func_d[6'h07] & sa_d[5'h00];
+assign inst_srlv   = op_d[6'h00] & func_d[6'h06] & sa_d[5'h00];
+
+assign inst_mult   = op_d[6'h00] & func_d[6'h18] & sa_d[5'h00];
+assign inst_multu  = op_d[6'h00] & func_d[6'h19] & sa_d[5'h00];
+assign inst_div    = op_d[6'h00] & func_d[6'h1a] & sa_d[5'h00];
+assign inst_divu   = op_d[6'h00] & func_d[6'h1b] & sa_d[5'h00];
+assign inst_mfhi   = op_d[6'h00] & func_d[6'h10] & sa_d[5'h00];
+assign inst_mflo   = op_d[6'h00] & func_d[6'h12] & sa_d[5'h00];
+assign inst_mthi   = op_d[6'h00] & func_d[6'h11];
+assign inst_mtlo   = op_d[6'h00] & func_d[6'h13];
+
 
 assign inst_addu   = op_d[6'h00] & func_d[6'h21] & sa_d[5'h00];
 assign inst_subu   = op_d[6'h00] & func_d[6'h23] & sa_d[5'h00];
@@ -176,34 +223,53 @@ assign inst_bne    = op_d[6'h05];
 assign inst_jal    = op_d[6'h03];
 assign inst_jr     = op_d[6'h00] & func_d[6'h08] & rt_d[5'h00] & rd_d[5'h00] & sa_d[5'h00];
 
-assign alu_op[ 0] = inst_addu | inst_addiu | inst_lw | inst_sw | inst_jal;
-assign alu_op[ 1] = inst_subu;
-assign alu_op[ 2] = inst_slt;
-assign alu_op[ 3] = inst_sltu;
-assign alu_op[ 4] = inst_and;
+assign alu_op[ 0] = inst_addu | inst_addiu | inst_lw | inst_sw | inst_jal
+                    | inst_add | inst_addi;
+assign alu_op[ 1] = inst_subu
+                    | inst_sub;
+assign alu_op[ 2] = inst_slt
+                    | inst_slti;
+assign alu_op[ 3] = inst_sltu
+                    | inst_sltiu;
+assign alu_op[ 4] = inst_and
+                    | inst_andi;
 assign alu_op[ 5] = inst_nor;
-assign alu_op[ 6] = inst_or;
-assign alu_op[ 7] = inst_xor;
-assign alu_op[ 8] = inst_sll;
-assign alu_op[ 9] = inst_srl;
-assign alu_op[10] = inst_sra;
+assign alu_op[ 6] = inst_or
+                    | inst_ori;
+assign alu_op[ 7] = inst_xor
+                    | inst_xori;
+assign alu_op[ 8] = inst_sll
+                    | inst_sllv;
+assign alu_op[ 9] = inst_srl
+                    | inst_srlv;
+assign alu_op[10] = inst_sra
+                    | inst_srav;
 assign alu_op[11] = inst_lui;
 
+assign alu_op[12] = inst_mult;
+assign alu_op[13] = inst_multu;
+assign alu_op[14] = inst_div;
+assign alu_op[15] = inst_divu;
 assign load_op = inst_lw;// 缺
 
 assign src1_is_sa   = inst_sll   | inst_srl | inst_sra;
 assign src1_is_pc   = inst_jal;
-assign src2_is_imm  = inst_addiu | inst_lui | inst_lw | inst_sw;
+assign src2_is_imm  = inst_addiu | inst_lui | inst_lw | inst_sw 
+                    | inst_addi  | inst_slti | inst_sltiu;
+assign src2_is_unsigned_imm =  inst_andi | inst_ori | inst_xori;
 assign src2_is_8    = inst_jal;
 assign res_from_mem = inst_lw;
 assign dst_is_r31   = inst_jal;
-assign dst_is_rt    = inst_addiu | inst_lui | inst_lw;
+assign dst_is_rt    = inst_addiu | inst_lui | inst_lw 
+                    | inst_addi  | inst_slti | inst_sltiu | inst_andi | inst_ori | inst_xori;  
 assign gr_we        = ~inst_sw & ~inst_beq & ~inst_bne & ~inst_jr;
 assign mem_we       = inst_sw; 
 
 assign dest         = dst_is_r31 ? 5'd31 :
                       dst_is_rt  ? rt    : 
-                                   rd;
+                                   rd;                                
+assign hilo         = {inst_mfhi,inst_mflo,inst_mthi,inst_mtlo};
+
 
 assign rf_raddr1 = rs;
 assign rf_raddr2 = rt;
@@ -218,52 +284,53 @@ regfile u_regfile(
     .wdata  (rf_wdata )
     );
 
-wire es_to_id_bypass_valid;
-wire [4:0] es_to_id_bypass_reg;
-wire [31:0] es_to_id_bypass_data;
+wire es_to_ds_bypass_valid;
+wire [4:0] es_to_ds_bypass_reg;
+wire [31:0] es_to_ds_bypass_data;
 wire es_to_id_is_inst_load;
 
-wire ms_to_id_bypass_valid;
-wire [4:0] ms_to_id_bypass_reg;
-wire [31:0]ms_to_id_bypass_data;
+wire ms_to_ds_bypass_valid;
+wire [4:0] ms_to_ds_bypass_reg;
+wire [31:0]ms_to_ds_bypass_data;
 
-wire ws_to_id_bypass_valid;
-wire [4:0] ws_to_id_bypass_reg;
-wire [31:0] ws_to_id_bypass_data;
+wire ws_to_ds_bypass_valid;
+wire [4:0] ws_to_ds_bypass_reg;
+wire [31:0] ws_to_ds_bypass_data;
 
-assign es_to_id_is_inst_load = es_to_id_bypass[32];
+assign es_to_id_is_inst_load = es_to_ds_bypass[32];
 
-assign es_to_id_bypass_valid = es_to_id_bypass[38];
-assign ms_to_id_bypass_valid = ms_to_id_bypass[37];
-assign ws_to_id_bypass_valid = ws_to_id_bypass[37];
+assign es_to_ds_bypass_valid = es_to_ds_bypass[38];
+assign ms_to_ds_bypass_valid = ms_to_ds_bypass[37];
+assign ws_to_ds_bypass_valid = ws_to_ds_bypass[37];
 
-assign es_to_id_bypass_reg = es_to_id_bypass[37:33];
-assign ms_to_id_bypass_reg = ms_to_id_bypass[36:32];
-assign ws_to_id_bypass_reg = ws_to_id_bypass[36:32];
+assign es_to_ds_bypass_reg = es_to_ds_bypass[37:33];
+assign ms_to_ds_bypass_reg = ms_to_ds_bypass[36:32];
+assign ws_to_ds_bypass_reg = ws_to_ds_bypass[36:32];
 
 
-assign es_to_id_bypass_data = es_to_id_bypass[31:0];
-assign ms_to_id_bypass_data = ms_to_id_bypass[31:0];
-assign ws_to_id_bypass_data = ws_to_id_bypass[31:0];
+assign es_to_ds_bypass_data = es_to_ds_bypass[31:0];
+assign ms_to_ds_bypass_data = ms_to_ds_bypass[31:0];
+assign ws_to_ds_bypass_data = ws_to_ds_bypass[31:0];
 
 assign ds_ready_go    = ~(
-    (es_to_id_bypass_valid && es_to_id_is_inst_load && ~src1_is_pc && rs == es_to_id_bypass_reg && rs!=0 )               ||
-    (es_to_id_bypass_valid &&  es_to_id_is_inst_load && ~src2_is_imm && ~src2_is_8 &&  rt == es_to_id_bypass_reg && rt!=0)            
-);
+    (es_to_ds_bypass_valid && es_to_id_is_inst_load && ~src1_is_pc && rs == es_to_ds_bypass_reg && rs!=0 )               ||
+    (es_to_ds_bypass_valid &&  es_to_id_is_inst_load && ~src2_is_imm && ~src2_is_8 &&  rt == es_to_ds_bypass_reg && rt!=0)            
+    );
+
 // assign debug_signal_sss = ;
 
-// assign ds_ready_go    =  ~(es_to_id_is_inst_load && ~src1_is_pc && rs == es_to_id_bypass_reg && rs!=0 ||
-//                            es_to_id_is_inst_load && ~src2_is_imm && ~src2_is_8 &&  rt == es_to_id_bypass_reg && rt!=0
+// assign ds_ready_go    =  ~(es_to_id_is_inst_load && ~src1_is_pc && rs == es_to_ds_bypass_reg && rs!=0 ||
+//                            es_to_id_is_inst_load && ~src2_is_imm && ~src2_is_8 &&  rt == es_to_ds_bypass_reg && rt!=0
 //                           );
 
-assign rs_value = (es_to_id_bypass_valid &&rs!=0 && rs == es_to_id_bypass_reg)? es_to_id_bypass_data:
-                  (ms_to_id_bypass_valid &&rs!=0 && rs == ms_to_id_bypass_reg)? ms_to_id_bypass_data:
-                  (ws_to_id_bypass_valid && rs!=0 && rs == ws_to_id_bypass_reg)? ws_to_id_bypass_data:
+assign rs_value = (es_to_ds_bypass_valid &&rs!=0 && rs == es_to_ds_bypass_reg)? es_to_ds_bypass_data:
+                  (ms_to_ds_bypass_valid &&rs!=0 && rs == ms_to_ds_bypass_reg)? ms_to_ds_bypass_data:
+                  (ws_to_ds_bypass_valid && rs!=0 && rs == ws_to_ds_bypass_reg)? ws_to_ds_bypass_data:
                   rf_rdata1;
 
-assign rt_value = (es_to_id_bypass_valid && rt!=0 && rt == es_to_id_bypass_reg)? es_to_id_bypass_data:
-                  (ms_to_id_bypass_valid && rt!=0 &&rt == ms_to_id_bypass_reg)? ms_to_id_bypass_data:
-                  (ws_to_id_bypass_valid && rt!=0 && rt == ws_to_id_bypass_reg)? ws_to_id_bypass_data:
+assign rt_value = (es_to_ds_bypass_valid && rt!=0 && rt == es_to_ds_bypass_reg)? es_to_ds_bypass_data:
+                  (ms_to_ds_bypass_valid && rt!=0 &&rt == ms_to_ds_bypass_reg)? ms_to_ds_bypass_data:
+                  (ws_to_ds_bypass_valid && rt!=0 && rt == ws_to_ds_bypass_reg)? ws_to_ds_bypass_data:
                   rf_rdata2;
 
 

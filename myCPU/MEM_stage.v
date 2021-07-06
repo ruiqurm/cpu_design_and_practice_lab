@@ -14,7 +14,7 @@ module mem_stage(
     output [`MS_TO_WS_BUS_WD -1:0] ms_to_ws_bus  ,
     //from data-sram
     input  [31                 :0] data_sram_rdata,
-    output [`MS_TO_ID_BYPASS-1:0] ms_to_id_bypass
+    output [`MS_TO_DS_BYPASS-1:0] ms_to_ds_bypass
 );
 
 reg         ms_valid;
@@ -63,6 +63,6 @@ assign mem_result = data_sram_rdata;
 assign ms_final_result = ms_res_from_mem ? mem_result
                                          : ms_alu_result;
 
-assign ms_to_id_bypass = {ms_valid & ms_gr_we,ms_dest,ms_final_result};
+assign ms_to_ds_bypass = {ms_valid & ms_gr_we,ms_dest,ms_final_result};
 
 endmodule

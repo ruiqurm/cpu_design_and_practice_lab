@@ -39,9 +39,9 @@ wire [`WS_TO_RF_BUS_WD -1:0] ws_to_rf_bus;
 wire [`BR_BUS_WD       -1:0] br_bus;
 
 //旁路
-wire [`ES_TO_ID_BYPASS-1:0] es_to_id_bypass;
-wire [`MS_TO_ID_BYPASS-1:0] ms_to_id_bypass;
-wire [`WS_TO_ID_BYPASS-1:0] ws_to_id_bypass;
+wire [`ES_TO_DS_BYPASS-1:0] es_to_ds_bypass;
+wire [`MS_TO_DS_BYPASS-1:0] ms_to_ds_bypass;
+wire [`WS_TO_DS_BYPASS-1:0] ws_to_ds_bypass;
 
 
 
@@ -82,9 +82,9 @@ id_stage id_stage(
     .ws_to_rf_bus   (ws_to_rf_bus   ),
 
     //bypass
-    .es_to_id_bypass(es_to_id_bypass),
-    .ms_to_id_bypass(ms_to_id_bypass),
-    .ws_to_id_bypass(ws_to_id_bypass)
+    .es_to_ds_bypass(es_to_ds_bypass),
+    .ms_to_ds_bypass(ms_to_ds_bypass),
+    .ws_to_ds_bypass(ws_to_ds_bypass)
 );
 // EXE stage
 exe_stage exe_stage(
@@ -105,7 +105,7 @@ exe_stage exe_stage(
     .data_sram_addr (data_sram_addr ),
     .data_sram_wdata(data_sram_wdata),
     //bypass
-    .es_to_id_bypass(es_to_id_bypass)
+    .es_to_ds_bypass(es_to_ds_bypass)
 );
 // MEM stage
 mem_stage mem_stage(
@@ -123,7 +123,7 @@ mem_stage mem_stage(
     //from data-sram
     .data_sram_rdata(data_sram_rdata),
     //bypass
-    .ms_to_id_bypass(ms_to_id_bypass)
+    .ms_to_ds_bypass(ms_to_ds_bypass)
 );
 // WB stage
 wb_stage wb_stage(
@@ -142,7 +142,7 @@ wb_stage wb_stage(
     .debug_wb_rf_wnum (debug_wb_rf_wnum ),
     .debug_wb_rf_wdata(debug_wb_rf_wdata),
     //bypass
-    .ws_to_id_bypass(ws_to_id_bypass)
+    .ws_to_ds_bypass(ws_to_ds_bypass)
 );
 
 endmodule
